@@ -3,6 +3,16 @@ FILENAME = arg[2] or os.exit(1)
 
 DELAY = 100
 
+local function get_index(t, v)
+	for i, o in ipairs(t) do
+		if o == v then
+			return i
+		end
+	end
+
+	return nil
+end
+
 local function ctags(filename, lines)
 	local handle = io.popen("ctags --fields=+ne -o - "..filename)
 
@@ -35,8 +45,23 @@ local function ctags(filename, lines)
 
 	local unread_lines = {}
 
-	for i, _ in ipairs(lines) do
-		unread_lines[i] = true
+	for i = 1, #lines do
+		table.insert(unread_lines, i)
+	end
+
+	for _, order in ipairs(orders) do
+		for i = order.start, order.stop do
+			local index = get_index(unread_lines, i)
+			if index ~= nil then
+				table.remove(unread_lines, index)
+			else
+				print("overlap", i)
+			end
+		end
+	end
+
+	for i = #unread_lines, 1, -1 do
+		table.insert(orders, 1, { start = unread_lines[i], stop = unread_lines[i] })
 	end
 
 	-- for _, words in ipairs(patterns) do
