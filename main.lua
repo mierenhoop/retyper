@@ -3,13 +3,12 @@ FILENAME = arg[2] or os.exit(1)
 
 DELAY = 100
 
-local function ctags(filename)
-	os.execute("ctags -f /tmp/tags "..filename)
-	local file = io.open("/tmp/tags", "r");
+local function ctags(filename, lines)
+	local handle = io.popen("ctags --fields=+ne -o - "..filename)
 
 	local patterns = {}
 
-	for line in file:lines() do
+	for line in handle:lines() do
 		if line:sub(0, 1) ~= '!' then
 			local words = {}
 			for token in string.gmatch(line, "[^\t]+") do
@@ -19,7 +18,40 @@ local function ctags(filename)
 		end
 	end
 
-	return patterns
+	local orders = {}
+
+	for i, words in ipairs(patterns) do
+		orders[i] = {}
+		for _, word in ipairs(words) do
+			if word:sub(1, 5) == "line:" then
+				orders[i].start = tonumber(word:sub(6))
+				orders[i].stop = orders[i].start
+			elseif word:sub(1, 4) == "end:" then
+				orders[i].stop = tonumber(word:sub(5))
+			end
+		end
+		print(orders[i].start, orders[i].stop)
+	end
+
+	local unread_lines = {}
+
+	for i, _ in ipairs(lines) do
+		unread_lines[i] = true
+	end
+
+	-- for _, words in ipairs(patterns) do
+	-- 	if words[1] == "main" then
+	-- 		for i, line in ipairs(lines) do
+	-- 			local pat = words[3]:sub(2, words[3]:len()-3)
+	-- 			-- TODO: Make this better
+	-- 			pat = pat:gsub("[%(%)%{]", ".")
+	-- 			print(string.find(line, pat), pat, line)
+	-- 		end
+	-- 		break
+	-- 	end
+	-- end
+
+	return orders
 end
 
 local function get_lines(filename)
@@ -35,7 +67,8 @@ end
 
 local function type_key(key, delay, rep)
 	delay = "--delay "..(delay or DELAY).." "
-	rep = rep == 0 and "" or "--repeat "..(rep or 1).." "
+	if rep == 0 then return end
+	rep = "--repeat "..(rep or 1).." "
 	os.execute("xdotool key "..delay..rep.." --window "..NANO_WINDOW.." "..key)
 end
 
@@ -55,32 +88,22 @@ local function type_all(orders, lines)
 	local position = 1
 
 	for _, order in ipairs(orders) do
-		local start = order[1]
-		local stop = order[2]
-
-		local move = math.abs(start - position)
-		local move_key = (position < start and "Down" or "Up")
-		print(move, move_key)
+		local move = math.abs(order.start - position)
+		local move_key = (position < order.start and "Down" or "Up")
 
 		type_key(move_key, nil, move)
 
-		for i = start, stop do
+		for i = order.start, order.stop do
 			type_line(lines[i])
 			type_key("Down")
 		end
-		position = stop + 1
+		position = order.stop + 1
 
 	end
 end
 
 
 local lines = get_lines(FILENAME)
-local patterns = ctags(FILENAME)
-
-local orders = {
-	{ 8, 12 },
-	{ 1, 3 },
-	{ 4, 6 },
-}
+local orders = ctags(FILENAME, lines)
 
 type_all(orders, lines)
